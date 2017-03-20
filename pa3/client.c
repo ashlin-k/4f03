@@ -21,7 +21,10 @@
 #include <string.h>
 #include <sys/wait.h>
 
+#include <pthread.h>
+
 // set up global variables
+pthread_t *thread_handles;
 unsigned int N;		// num threads
 unsigned int M; 	// num of segments
 unsigned int L; 	// length of each segment
@@ -35,7 +38,7 @@ char *hostname2 = "";				// verify server name
 CLIENT *clnt_append, *clnt_verify;
 
 // declare functions
-int addToS(long rank);
+void* addToS(void* rank);
 unsigned int count_chars(char* s, char ch);
 
 int main(int argc, char **argv)
@@ -116,7 +119,14 @@ int main(int argc, char **argv)
 			return -1;
 		}
 	}
-	
+
+	// call one of these for allocating memory for the thread thread_handles
+	thread_handles = (pthread_t*)calloc(N, sizeof(pthread_t));
+	if (thread_handles == NULL)
+	{
+		printf("Cannot allocate memory for pthread.\n");
+		return -1;
+	}	
 
 	// allocate space for S
 	// S = (sstr*)calloc(1, sizeof(sstr));
@@ -195,13 +205,24 @@ int main(int argc, char **argv)
     // the threads return a value, which is the number of segments that passed
     // each thread's return value should be added to the variable passed
     printf("Creating threads...\n");
-    #pragma omp parallel for num_threads(N) reduction(+: passed)
+/*    #pragma omp parallel for num_threads(N) reduction(+: passed)
     for (threadCount = 0; threadCount < N;  threadCount++)
 	{
 		passed += addToS(threadCount);
 	}
 	printf("Threads complete. Destroy clients\n");
-
+*/
+	void* threadPassedPtr;
+	for (threadCount = 0; threadCount < N;  threadCount++)
+	{
+		pthread_create(&thread_handles[threadCount],NULL,addToS, (void*) threadCount);
+	}
+	for (threadCount = 0; threadCount < N;  threadCount++)
+	{
+		pthread_join(thread_handles[threadCount],NULL);
+		passed+= *(int*)(&threadPassedPtr);
+	}
+	free(thread_handles);
 	// destroy clients
 	if (clnt_append != NULL) clnt_destroy(clnt_append);
 	if (clnt_verify != NULL) clnt_destroy(clnt_verify);
@@ -229,9 +250,9 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-int addToS(long rank)
+void* addToS(void* rank)
 {	
-	long my_rank = rank;
+	long my_rank = (long)rank;
 	char my_char = 'a' + my_rank;
 	unsigned int timeMicrosec = 0;
 	int* appendRet = (int*)calloc(1, sizeof(int));
@@ -302,7 +323,7 @@ int addToS(long rank)
 	// 	}
 	}
 
-	return counter;
+	return (void*) counter;
 }
 
 

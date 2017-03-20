@@ -14,7 +14,7 @@ CFLAGS = -lnsl
 all: $(EXE) 
 
 client: $(CLIENT_OBJ)
-	$(CC) -o $@ $^ $(CFLAGS) -fopenmp
+	$(CC) -o $@ $^ $(CFLAGS) -lpthread #fopenmp
 
 server_verify: $(VERIFY_OBJ)
 	$(CC) -o $@ $^ $(CFLAGS) -lpthread
