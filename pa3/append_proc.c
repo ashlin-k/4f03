@@ -9,27 +9,17 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-// static unsigned int appM; 	// num of segments
-// static unsigned int appL; 	// length of each segment
-// static unsigned int appF; 	// criteria num to check
-// static char appc0; 
-// static char appc1; 
-// static char appc2;
-// static char* app_hostname2 = "";
-static int sentS;
+int sentS;
+struct append_arg *app;
+struct sstr *appS;
+char *ipVerify;
 
-static append_arg *app;
-
-#define APPEND_PORT   1987
-#define VERIFY_PORT	  1988
-#define PORT 1986
-#define BUFSIZE 2076
-
+#define PORT_APPEND 1987
+#define BUFLEN 2076
 #define SERVER_NAME "moore.mcmaster.ca"
-#define SERVER_PORT 1240
 
 void error(char *msg);
-int hostname_to_ip(char* hostname, struct sockaddr_in *socket_addr);
+int hostname_to_ip(char* hostname, char* ip);
 int sendSToVerify();
 
 struct sstr
@@ -38,8 +28,6 @@ struct sstr
 	size_t max_length;
 	size_t index;
 };
-
-static struct sstr *appS;
 
 int* rpc_initappendserver_1_svc(struct append_arg *arg, struct svc_req * req)
 // int* rpc_initappendserver_1(struct append_arg *arg, CLIENT* clnt)
@@ -65,6 +53,11 @@ int* rpc_initappendserver_1_svc(struct append_arg *arg, struct svc_req * req)
 	app->c2 = arg->c2;
 	app->hostname2 = arg->hostname2;	
 	sentS = 0;
+
+	ipVerify = (char*)calloc(100, sizeof(char));
+	hostname_to_ip(app->hostname2, ipVerify);
+
+	printf("init: IP: %s\n", ipVerify);
 
 	// allocate space for S
 	appS = (struct sstr*)calloc(1, sizeof(struct sstr));
@@ -95,7 +88,9 @@ int* rpc_append_1_svc(char* c, struct svc_req * req)
 
 		if (sentS == 0)
 		{	
+			printf("APP: S is complete\n");
 			sendSToVerify(app->hostname2);
+			printf("APP: UDP socket created.\n");
 			sentS = 1;
 		}
 	}
@@ -106,55 +101,43 @@ int* rpc_append_1_svc(char* c, struct svc_req * req)
 
 int sendSToVerify()
 {
-	int s, portno, n;
-    int serverlen;
-    struct sockaddr_in serveraddr;
-    struct hostent *server;
-    char *hostname;
-    char buf[BUFSIZE];
+	printf("sendSToVerify: IP: %s\n", ipVerify);
 
-    portno = SERVER_PORT;
-
-    /* socket: create the socket */
-    s = socket(AF_INET, SOCK_DGRAM, 0);
-    if (s < 0) 
-        error("ERROR opening socket");
-
-    /* build the server's Internet address */
-    memset((char *) &serveraddr, 0, sizeof(serveraddr));
-
-    /*gethostbyname: get the server's DNS entry*/
-    
-    hostname = SERVER_NAME;
-    server = gethostbyname(hostname);
-    if (server == NULL) {
-        fprintf(stderr,"ERROR, no such host as %s\n", hostname);
-        exit(0);
+	struct sockaddr_in si_other;
+    int s, i, slen=sizeof(si_other);
+    // char* ipVerify;
+    char buf[BUFLEN];
+    char message[BUFLEN];    
+ 
+    if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+    {
+        error("socket");
     }
-    bcopy((char *)server->h_addr, (char *)&serveraddr.sin_addr.s_addr, server->h_length);
+    int option = 1;
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
 
-    /* Following line set server address same as the computer where this program runs
-        assuming that server and client are in same computer.
-        If not, coment following line, define SERVER_NAME and uncoment code block above*/
-    //serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+ //    memset((char*) &si_me, 0, sizeof(si_me));
+	// si_me.sin_family = AF_INET;
+	// si_me.sin_port = htons(PORT_VERIFY);
+ //    si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+ 
+    memset((char *) &si_other, 0, sizeof(si_other));
+    si_other.sin_family = AF_INET;
+    si_other.sin_port = htons(PORT_APPEND);
 
-    serveraddr.sin_family = AF_INET;
-    serveraddr.sin_port = htons(portno);
-
-    /* get a message from the user */
-    memset(buf, 0, BUFSIZE);
-    memset(buf, 'a', 10);
-    // printf("Please enter msg: ");
-    // fgets(buf, BUFSIZE, stdin);
-
-    /* send the message to the server */
-    serverlen = sizeof(serveraddr);
-    n = sendto(s, buf, strlen(buf), 0, &serveraddr, serverlen);
-    while(n < 0){
-        n = sendto(s, buf, strlen(buf), 0, &serveraddr, serverlen);
+    // hostname_to_ip(app->hostname2, ipVerify);
+     
+    if (inet_aton(ipVerify , &si_other.sin_addr) == 0) 
+    {
+        fprintf(stderr, "inet_aton() failed\n");
+        exit(1);
     }
-    //if (n < 0) 
-    //  error("ERROR in sendto");
+
+    if (sendto(s, message, strlen(message) , 0 , (struct sockaddr *) &si_other, slen)==-1)
+    {
+        error("sendto()");
+    }
+	close(s);	
 
     return 0;
 }
@@ -163,3 +146,98 @@ void error(char *msg) {
     perror(msg);
     exit(0);
 }
+
+int hostname_to_ip(char * hostname , char* ip)
+{
+    struct hostent *he;
+    struct in_addr **addr_list;
+    int i;
+    char* host;
+
+    // if (hostname != SERVER_NAME) host = SERVER_NAME;
+    // else host = hostname;
+
+    host = SERVER_NAME;
+
+    printf("hostname: %s\n", host);
+    he = (struct hostent*)calloc(1, sizeof(struct hostent));
+    he = gethostbyname( host );
+    printf("host gotten\n");   
+    if ( he == NULL) 
+    {
+        // get the host info
+        herror("gethostbyname");
+        return 1;
+    }    
+
+    addr_list = (struct in_addr **) he->h_addr_list;
+     
+    for(i = 0; addr_list[i] != NULL; i++) 
+    {
+        //Return the first one;
+        strcpy(ip , inet_ntoa(*addr_list[i]) );
+        return 0;
+    }
+     
+    return 1;
+}
+
+
+
+
+
+
+
+
+
+
+
+// int s, portno, n;
+//     int serverlen;
+//     struct sockaddr_in serveraddr;
+//     struct hostent *server;
+//     char *hostname;
+//     char buf[BUFSIZE];
+
+//     portno = SERVER_PORT_APPEND;
+
+//     /* socket: create the socket */
+//     s = socket(AF_INET, SOCK_DGRAM, 0);
+//     if (s < 0) 
+//         error("ERROR opening socket");
+
+//     /* build the server's Internet address */
+//     memset((char *) &serveraddr, 0, sizeof(serveraddr));
+
+//     /*gethostbyname: get the server's DNS entry*/
+    
+//     hostname = SERVER_NAME;
+//     server = gethostbyname(hostname);
+//     if (server == NULL) {
+//         fprintf(stderr,"ERROR, no such host as %s\n", hostname);
+//         exit(0);
+//     }
+//     bcopy((char *)server->h_addr, (char *)&serveraddr.sin_addr.s_addr, server->h_length);
+
+//      Following line set server address same as the computer where this program runs
+//         assuming that server and client are in same computer.
+//         If not, coment following line, define SERVER_NAME and uncoment code block above
+//     //serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+//     serveraddr.sin_family = AF_INET;
+//     serveraddr.sin_port = htons(portno);
+
+//     /* get a message from the user */
+//     memset(buf, 0, BUFSIZE);
+//     memset(buf, 'a', 10);
+//     // printf("Please enter msg: ");
+//     // fgets(buf, BUFSIZE, stdin);
+
+//     /* send the message to the server */
+//     serverlen = sizeof(serveraddr);
+//     n = sendto(s, buf, strlen(buf), 0, &serveraddr, serverlen);
+//     while(n < 0){
+//         n = sendto(s, buf, strlen(buf), 0, &serveraddr, serverlen);
+//     }
+//     //if (n < 0) 
+//     //  error("ERROR in sendto");

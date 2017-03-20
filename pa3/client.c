@@ -1,4 +1,4 @@
-// to run: ./client 0 4 3 4 a b c "moore.cas.mcmaster.ca" "moore.cas.mcmaster.ca"
+// to run: ./client 0 4 3 4 a b c "moore.mcmaster.ca" "moore.mcmaster.ca"
 
 #include <math.h>
 #include <stdlib.h>
