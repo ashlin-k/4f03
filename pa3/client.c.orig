@@ -332,7 +332,13 @@ void* addToS(void* rank)
 		}
 	}
 
-	printf("--> T%lu: count = %lu\n", my_rank, counter);	return (void*) counter;}
+<<<<<<< HEAD
+	printf("--> T%lu: count = %lu\n", my_rank, counter);
+	return counter;
+=======
+	return (void*) counter;
+>>>>>>> prakhar
+}
 
 
 //function to count occurrences of character in S within a segment
