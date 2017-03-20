@@ -17,10 +17,10 @@ client: $(CLIENT_OBJ)
 	$(CC) -o $@ $^ $(CFLAGS) -fopenmp
 
 server_verify: $(VERIFY_OBJ)
-	$(CC) -o $@ $^ $(CFLAGS) 
+	$(CC) -o $@ $^ $(CFLAGS) -lpthread
 
 server_append: $(APPEND_OBJ)
-	$(CC) -o $@ $^ $(CFLAGS)
+	$(CC) -o $@ $^ $(CFLAGS) 
 
 client.o: $(SOURCE) $(DEPS)
 	$(CC) -c $(SOURCE) 
