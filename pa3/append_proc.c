@@ -23,10 +23,14 @@ static append_arg *app;
 #define APPEND_PORT   1987
 #define VERIFY_PORT	  1988
 #define PORT 1986
-#define BUFLEN 2076
+#define BUFSIZE 2076
 
+#define SERVER_NAME "moore.mcmaster.ca"
+#define SERVER_PORT 1240
+
+void error(char *msg);
 int hostname_to_ip(char* hostname, struct sockaddr_in *socket_addr);
-int sendSToVerify(char* hostname);
+int sendSToVerify();
 
 struct sstr
 {
@@ -100,97 +104,62 @@ int* rpc_append_1_svc(char* c, struct svc_req * req)
 
 }
 
-int sendSToVerify(char* hostname)
+int sendSToVerify()
 {
-	printf("Setting up udp\n");
-	struct sockaddr_in si_append;
-	int sock;
-	char buf[BUFLEN];
-	char message[BUFLEN];
+	int s, portno, n;
+    int serverlen;
+    struct sockaddr_in serveraddr;
+    struct hostent *server;
+    char *hostname;
+    char buf[BUFSIZE];
 
-	// get ip addr of verify_server
-	// mills: 130.113.68.9
-	// moore: 130.113.68.130
-	memset((char *) &si_append, 0, sizeof(si_append));
-    si_append.sin_family = AF_INET;
-    si_append.sin_port = htons(PORT);
-    char *strIP = "130.113.68.130";
-    inet_aton(strIP, &si_append.sin_addr);
-	// hostname_to_ip(hostname, &si_append);
-	printf("Got IP\n");
+    portno = SERVER_PORT;
 
-		// create socket
-    if ( (sock=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-    {
-        exit(1);
+    /* socket: create the socket */
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+    if (s < 0) 
+        error("ERROR opening socket");
+
+    /* build the server's Internet address */
+    memset((char *) &serveraddr, 0, sizeof(serveraddr));
+
+    /*gethostbyname: get the server's DNS entry*/
+    
+    hostname = SERVER_NAME;
+    server = gethostbyname(hostname);
+    if (server == NULL) {
+        fprintf(stderr,"ERROR, no such host as %s\n", hostname);
+        exit(0);
     }
- 
- 	printf("Socket created\n");	    
+    bcopy((char *)server->h_addr, (char *)&serveraddr.sin_addr.s_addr, server->h_length);
 
-    // put string and buffer and send packet
-    sprintf(buf, appS->s);
-	if (sendto(sock, buf, BUFLEN, 0, (struct sockaddr *)&si_append, (socklen_t)sizeof(si_append))==-1)
-	{
-		exit(1);
-	}
-	printf("Send completed\n");
-	close(sock);
+    /* Following line set server address same as the computer where this program runs
+        assuming that server and client are in same computer.
+        If not, coment following line, define SERVER_NAME and uncoment code block above*/
+    //serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	return 0;
-}
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_port = htons(portno);
 
-int hostname_to_ip(char *hostname, struct sockaddr_in *socket_addr)
-{
-    struct addrinfo hints, *res, *p;
-    int status;
-    char ipstr[INET6_ADDRSTRLEN];
+    /* get a message from the user */
+    memset(buf, 0, BUFSIZE);
+    memset(buf, 'a', 10);
+    // printf("Please enter msg: ");
+    // fgets(buf, BUFSIZE, stdin);
 
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET; // AF_INET or AF_INET6 to force version
-    hints.ai_socktype = SOCK_DGRAM;
-
-    printf ("Hostname: %s\n", app->hostname2);
-
-    char* host = "moore.cas.mcmaster.ca";
-
-    if ((status = getaddrinfo(host, NULL, &hints, &res)) != 0) 
-    {
-        // fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-        return -1;
+    /* send the message to the server */
+    serverlen = sizeof(serveraddr);
+    n = sendto(s, buf, strlen(buf), 0, &serveraddr, serverlen);
+    while(n < 0){
+        n = sendto(s, buf, strlen(buf), 0, &serveraddr, serverlen);
     }
-
-    printf("IP addresses for %s:\n\n", host);
-
-    struct sockaddr_in *ipv4 = calloc(1, sizeof(struct sockaddr_in));
-
-    for(p = res;p != NULL; p = p->ai_next) {
-        void *addr;
-        char *ipver;
-
-        // get the pointer to the address itself,
-        // different fields in IPv4 and IPv6:
-        if (p->ai_family == AF_INET) // IPv4
-        { 
-            struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
-            addr = &(ipv4->sin_addr);
-            ipver = "IPv4";
-        } 
-        else // IPv6
-        { 
-        	printf("IPv6 address!\n");
-        //     struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
-        //     addr = &(ipv6->sin6_addr);
-        //     ipver = "IPv6";
-        }
-
-        // convert the IP to a string and print it:
-        inet_ntop(p->ai_family, addr, ipstr, sizeof(ipstr));
-        printf("  %s: %s\n", ipver, ipstr);
-
-        socket_addr->sin_addr.s_addr = ipv4->sin_addr.s_addr;
-    }
-
-    freeaddrinfo(res); // free the linked list
+    //if (n < 0) 
+    //  error("ERROR in sendto");
 
     return 0;
+}
+
+void error(char *msg) {
+    perror(msg);
+    exit(0);
 }

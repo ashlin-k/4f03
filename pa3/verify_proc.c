@@ -19,9 +19,10 @@ static int sock;
 #define APPEND_PORT   1987
 #define VERIFY_PORT	  1988
 #define PORT 1986
-#define BUFLEN 2076
+#define BUFSIZE 2076
 
 // int hostname_to_ip(char * hostname , char* ip);
+void error(char *msg);
 
 
 int* rpc_initverifyserver_1_svc(struct verify_arg *arg, struct svc_req * req)
@@ -41,55 +42,76 @@ int* rpc_initverifyserver_1_svc(struct verify_arg *arg, struct svc_req * req)
 	verS = "abcdefghijklmno";
 
 	/**** set up sockets ****/
-	// create a socket
-	struct sockaddr_in socket_append, socket_verify;
-	sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	if (sock == -1)
-	{
-		exit(0);
-	}
-	else
-	{
-		printf("UDP Socket created successfully.\n");
-	}
-	// verify socket (server side)
-	memset((char *) &socket_verify, 0, sizeof(socket_verify));
-	socket_verify.sin_family = AF_INET;
-	socket_verify.sin_port = htons(PORT);
-	socket_verify.sin_addr.s_addr = htonl(INADDR_ANY); 
+	int s; /* socket */
+  int portno = 1240; /* port to listen on */
+  int clientlen; /* byte size of client's address */
+  struct sockaddr_in serveraddr; /* server's addr */
+  struct sockaddr_in clientaddr; /* client addr */
+  struct hostent *hostp; /* client host info */
+  char buf[BUFSIZE]; /* message buf */
+  char *hostaddrp; /* dotted decimal host addr string */
+  int optval; /* flag value for setsockopt */
+  int n; /* message byte size */
 
-	result = bind(sock, (struct sockaddr*)&socket_verify, sizeof(socket_verify));
-	if (result == -1)
-	{
-		exit(0);
-	}
-	else
-		printf("Socket bound successfully.\n");
-	
-	char* buf[BUFLEN];
-	memset((char *) buf, '\0', BUFLEN);
-	int recv_len = 0;
-	while(buf == '\0')
-    {
-        printf("Waiting for data...");
-        fflush(stdout);
-         
-        //try to receive some data, this is a blocking call
-        if ((recv_len = recvfrom(sock, buf, BUFLEN, 0, (struct sockaddr *) &socket_append, sizeof(socket_append))) == -1)
-        {
-            exit(1);
-        }
-         
-        //print details of the client/peer and the data received
-        printf("Received packet from %s:%d\n", inet_ntoa(socket_append.sin_addr), ntohs(socket_append.sin_port));
-        printf("Data: %s\n" , buf);
 
-        sleep(1);
-     }
+  /* 
+   * socket: create the parent socket 
+   */
+  s = socket(AF_INET, SOCK_DGRAM, 0);
+  if (s < 0) 
+    error("ERROR opening socket");
 
-     printf("Buffer: %s\n", buf);
+  /* setsockopt: Handy debugging trick that lets 
+   * us rerun the server immediately after we kill it; 
+   * otherwise we have to wait about 20 secs. 
+   * Eliminates "ERROR on binding: Address already in use" error. 
+   */
+  optval = 1;
+  setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const void *)&optval , sizeof(int));
 
-    close(sock);	
+  /*
+   * build the server's Internet address
+   */
+  memset((char *) &serveraddr, 0, sizeof(serveraddr));
+  serveraddr.sin_family = AF_INET;
+  serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  serveraddr.sin_port = htons((unsigned short)portno);
+
+  /* 
+   * bind: associate the parent socket with a port 
+   */
+  if (bind(s, (struct sockaddr *) &serveraddr, sizeof(serveraddr)) < 0){
+    error("ERROR on binding");
+  }
+  
+
+  /* 
+   * main loop: wait for a datagram, then echo it
+   */
+  clientlen = sizeof(clientaddr);
+  while (1) {
+
+    /*
+     * recvfrom: receive a UDP datagram from a client
+     */
+    memset(buf, 0, BUFSIZE);
+    n = recvfrom(s, buf, BUFSIZE, 0,(struct sockaddr *) &clientaddr, &clientlen);
+    if (n < 0)
+      error("ERROR in recvfrom");
+
+    /* 
+     * gethostbyaddr: determine who sent the datagram
+     */
+    hostp = gethostbyaddr((const char *)&clientaddr.sin_addr.s_addr, sizeof(clientaddr.sin_addr.s_addr), AF_INET);
+    if (hostp == NULL)
+      error("ERROR on gethostbyaddr");
+    hostaddrp = inet_ntoa(clientaddr.sin_addr);
+    if (hostaddrp == NULL)
+      error("ERROR on inet_ntoa\n");
+    printf("server received datagram from %s (%s)\n", hostp->h_name, hostaddrp);
+    printf("server received %d/%d bytes: %s\n", strlen(buf), n, buf);
+    
+  }
 
 	return &result;
 }
@@ -114,6 +136,12 @@ char** rpc_getseg_1_svc(long* rank, struct svc_req *req)
 char** rpc_getstring_1_svc(void * ptr, struct svc_req * req)
 {
 	return &verS;
+}
+
+
+void error(char *msg) {
+  perror(msg);
+  exit(1);
 }
 
 // int hostname_to_ip(char * hostname , char* ip)
