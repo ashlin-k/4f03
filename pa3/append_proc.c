@@ -13,8 +13,10 @@ int sentS;
 struct append_arg *app;
 struct sstr *appS;
 char *ipVerify;
+struct hostent *he;
 
 #define PORT_APPEND 1987
+#define PORT_VERIFY 8888
 #define BUFLEN 2076
 #define SERVER_NAME "moore.mcmaster.ca"
 
@@ -104,10 +106,10 @@ int sendSToVerify()
 	printf("sendSToVerify: IP: %s\n", ipVerify);
 
 	struct sockaddr_in si_other;
-    int s, i, slen=sizeof(si_other);
-    // char* ipVerify;
+    int s, i;
     char buf[BUFLEN];
-    char message[BUFLEN];    
+    char message[BUFLEN]; 
+    strcpy(message, "test message");  
  
     if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
     {
@@ -116,16 +118,12 @@ int sendSToVerify()
     int option = 1;
     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
 
- //    memset((char*) &si_me, 0, sizeof(si_me));
-	// si_me.sin_family = AF_INET;
-	// si_me.sin_port = htons(PORT_VERIFY);
- //    si_me.sin_addr.s_addr = htonl(INADDR_ANY);
- 
-    memset((char *) &si_other, 0, sizeof(si_other));
-    si_other.sin_family = AF_INET;
-    si_other.sin_port = htons(PORT_APPEND);
-
-    // hostname_to_ip(app->hostname2, ipVerify);
+    memset((char*) &si_other, 0, sizeof(si_other));
+	si_other.sin_family = AF_INET;
+	si_other.sin_port = htons(PORT_VERIFY);
+    si_other.sin_addr.s_addr = htonl(INADDR_ANY);
+    bcopy((char *)he->h_addr, (char *)&si_other.sin_addr.s_addr, he->h_length);
+    int slen=sizeof(si_other);
      
     if (inet_aton(ipVerify , &si_other.sin_addr) == 0) 
     {
@@ -137,6 +135,8 @@ int sendSToVerify()
     {
         error("sendto()");
     }
+    printf("APP: message sent\n");
+
 	close(s);	
 
     return 0;
@@ -148,8 +148,7 @@ void error(char *msg) {
 }
 
 int hostname_to_ip(char * hostname , char* ip)
-{
-    struct hostent *he;
+{    
     struct in_addr **addr_list;
     int i;
     char* host;
