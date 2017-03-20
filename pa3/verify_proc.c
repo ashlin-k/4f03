@@ -14,6 +14,7 @@
 struct verify_arg *ver;
 char* verS;
 pthread_t *handle;
+unsigned int segCounter;
 
 #define PORT_VERIFY 8888
 #define BUFLEN 2076
@@ -31,7 +32,9 @@ int* rpc_initverifyserver_1_svc(struct verify_arg *arg, struct svc_req * req)
 	ver->n = arg->n;
 	ver->l = arg->l;
 	ver->m = arg->m;
-	verS = "abcdefghijklmno";
+	verS = (char*) calloc(BUFLEN, sizeof(char));
+	memset(verS, '\0', BUFLEN);
+	segCounter = 0;
 
 	/**** set up sockets ****/
 	// #pragma omp parallel num_threads(1)
@@ -88,9 +91,10 @@ void* setupUdp()
     {
         error("recvfrom()");
     }
+    strcpy(verS, buf);
     //print details of the client/peer and the data received
     printf("Received packet from %s:%d\n", inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
-    printf("Data: %s\n" , buf);  
+    printf("Buffer: %s\t verS: %s\n" , buf, verS);  
  
     close(s);
 
@@ -101,15 +105,25 @@ char** rpc_getseg_1_svc(long* rank, struct svc_req *req)
 {
 	static char* seg;
 	unsigned int i = 0;
-	seg = (char*)calloc(ver->l, sizeof(char));
-	unsigned int start = (*rank) * (ver->m/ver->n) * ver->l;
+	seg = (char*)calloc(ver->l + 1, sizeof(char));
+	memset(seg, '\0', ver->l + 1);
+	unsigned int start = segCounter * ver->l;
+	char* sentinel = "-";
+	// seg = "a" + segCounter;
+	// unsigned int start = (*rank) * (ver->m/ver->n) * ver->l;
 	// unsigned int end = start + L - 1;
 
-	for (i=0 ; i<ver->l; i++)
+	if (segCounter >= ver->m)
 	{
-		seg[i] = verS[start + i];
+		strcpy(seg, sentinel);
 	}
-
+	else
+	{
+		strncpy(seg, verS+start, ver->l);		
+		segCounter++;
+	}
+	
+	printf("segCounter = %lu, seg = %s\n", segCounter, seg);
 	return &seg;
 }
 

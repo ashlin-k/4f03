@@ -79,7 +79,7 @@ int* rpc_append_1_svc(char* c, struct svc_req * req)
 
 	// printf("index: %d, M: %lu, L: %lu\n", appS->index, app->m, app->l);
 
-	if (appS->index < (app->m*app->l - 1))
+	if (appS->index < (app->m*app->l))
 	{
 		strcat(appS->s, (const char*)&ch);
 		appS->index++;		
@@ -109,7 +109,7 @@ int sendSToVerify()
     int s, i;
     char buf[BUFLEN];
     char message[BUFLEN]; 
-    strcpy(message, "test message");  
+    strcpy(message, appS->s);  
  
     if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
     {

@@ -34,6 +34,8 @@ char *hostname1 = "";				// append server name
 char *hostname2 = "";				// verify server name
 CLIENT *clnt_append, *clnt_verify;
 
+#define BUFLEN 2076
+
 // declare functions
 int addToS(long rank);
 unsigned int count_chars(char* s, char ch);
@@ -207,23 +209,30 @@ int main(int argc, char **argv)
 	if (clnt_verify != NULL) clnt_destroy(clnt_verify);
 
 	printf("Clients destroyed. Print results\n");
+
+	// get S from verify_server
+	char** str_ptr;
+	*str_ptr = (char*) calloc(BUFLEN, sizeof(char));
+	str_ptr = rpc_getstring_1(NULL, clnt_verify);
+	// char* str = *str_ptr;
 	
 	//set up print to file ----------------------------------------------
 
 	// FILE *fp;
 	// fp = fopen("out.txt", "w");
-	// if (fp == NULL) {
+	// if (fp == NULL) 
+	// {
 	// 	printf("unable to write to out.txt\n");
 	// 	exit(0);
- //      }
+ //    }
 
-	//results
-	// printf("%s\n", S->s);
-	// fprintf(fp, "%s\n", S->s);
+	// // results
+	// printf("%s\n", str);
+	// fprintf(fp, "%s\n", str);
 	// printf("%d\n", passed);
 	// fprintf(fp, "%d\n", passed);
 
-	//close the file
+	// // close the file
 	// fclose(fp);
 
 	return 0;
@@ -264,9 +273,9 @@ int addToS(long rank)
 	char* seg;
 	seg = (char*)calloc(L, sizeof(char));
 	char** verifyRet;
-	// while (seg[0] != "-")
-	int i = 0;
-	for (i=0; i<5; i++)
+	while (seg[0] != '-')
+	// int i = 0;
+	// for (i=0; i<5; i++)
 	{
 		verifyRet = rpc_getseg_1(&my_rank, clnt_verify);
 		if (verifyRet == (char**)NULL)
@@ -277,31 +286,32 @@ int addToS(long rank)
 	 	seg = *verifyRet;
 	 	printf("--> T%lu: seg = %s\n", my_rank, seg);
 
-	// 	// count occurrences of c0, c1 and c2 in S
-	// 	occC0 = count_chars(*seg, c0);
-	// 	occC1 = count_chars(*seg, c1);
-	// 	occC2 = count_chars(*seg, c2);
+		// count occurrences of c0, c1 and c2 in S
+		occC0 = count_chars(seg, c0);
+		occC1 = count_chars(seg, c1);
+		occC2 = count_chars(seg, c2);
 
-	// 	switch(F) 
-	// 	{
-	// 		case 0: 
-	// 		counter += (occC0 + occC1 == occC2);
-	// 		break;
+		switch(F) 
+		{
+			case 0: 
+			counter += (occC0 + occC1 == occC2);
+			break;
 
-	// 		case 1: 
-	// 		counter += (occC0 + 2*occC1 == occC2);
-	// 		break;
+			case 1: 
+			counter += (occC0 + 2*occC1 == occC2);
+			break;
 
-	// 		case 2: 
-	// 		counter += (occC0 * occC1 == occC2);
-	// 		break;
+			case 2: 
+			counter += (occC0 * occC1 == occC2);
+			break;
 
-	// 		case 3: 
-	// 		counter += (occC0 - occC1 == occC2);
-	// 		break;
-	// 	}
+			case 3: 
+			counter += (occC0 - occC1 == occC2);
+			break;
+		}
 	}
 
+	printf("--> T%lu: count = %lu\n", my_rank, counter);
 	return counter;
 }
 
@@ -312,7 +322,7 @@ unsigned int count_chars(char* s, char ch)
 	int count = 0;
 	unsigned int i = 0;
 
-  	for (i = 0; i <= L; i++)
+  	for (i = 0; i < L; i++)
     	if (s[i] == ch) count++;
 
   	return count;
