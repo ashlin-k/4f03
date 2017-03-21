@@ -16,8 +16,8 @@ char *ipVerify;
 struct hostent *he;
 
 #define PORT_APPEND 1987
-#define PORT_VERIFY 8888
-#define BUFLEN 2076
+#define PORT_VERIFY 8889
+#define BUFLEN 1024
 #define SERVER_NAME "moore.mcmaster.ca"
 
 void error(char *msg);
@@ -32,19 +32,8 @@ struct sstr
 };
 
 int* rpc_initappendserver_1_svc(struct append_arg *arg, struct svc_req * req)
-// int* rpc_initappendserver_1(struct append_arg *arg, CLIENT* clnt)
 {
-	printf("Init append server\n");
-
 	static int result = 0;
-
-	// appF = arg->f;
-	// appL = arg->l;
-	// appM = arg->m;
-	// appc0 = arg->c0;
-	// appc1 = arg->c1;
-	// appc2 = arg->c2;
-	// app_hostname2 = arg->hostname2;
 
 	app = (struct append_arg*) calloc(1, sizeof(struct append_arg));
 	app->f = arg->f;
@@ -59,7 +48,7 @@ int* rpc_initappendserver_1_svc(struct append_arg *arg, struct svc_req * req)
 	ipVerify = (char*)calloc(100, sizeof(char));
 	hostname_to_ip(app->hostname2, ipVerify);
 
-	printf("init: IP: %s\n", ipVerify);
+	// printf("init: IP: %s\n", ipVerify);
 
 	// allocate space for S
 	appS = (struct sstr*)calloc(1, sizeof(struct sstr));
@@ -72,17 +61,18 @@ int* rpc_initappendserver_1_svc(struct append_arg *arg, struct svc_req * req)
 }
 
 int* rpc_append_1_svc(char* c, struct svc_req * req)
-// int* rpc_append_1(char* c, sCLIENT* clnt)
 {
-	char ch = c[0];
+	// printf("char recevied: %c\n", c[0]);
 	static int result = 0;
 
 	// printf("index: %d, M: %lu, L: %lu\n", appS->index, app->m, app->l);
 
 	if (appS->index < (app->m*app->l))
 	{
-		strcat(appS->s, (const char*)&ch);
-		appS->index++;		
+		appS->s[appS->index] = c[0];
+		appS->index++;	
+		appS->s[appS->index] = '\0';
+		// printf("S: %s\n", appS->s);	
 	}
 	else
 	{
@@ -90,9 +80,9 @@ int* rpc_append_1_svc(char* c, struct svc_req * req)
 
 		if (sentS == 0)
 		{	
-			printf("APP: S is complete\n");
+			// printf("APP: S is complete\n");
 			sendSToVerify(app->hostname2);
-			printf("APP: UDP socket created.\n");
+			// printf("APP: UDP socket created.\n");
 			sentS = 1;
 		}
 	}
@@ -103,13 +93,10 @@ int* rpc_append_1_svc(char* c, struct svc_req * req)
 
 int sendSToVerify()
 {
-	printf("sendSToVerify: IP: %s\n", ipVerify);
+	// printf("sendSToVerify: IP: %s\n", ipVerify);
 
 	struct sockaddr_in si_other;
-    int s, i;
-    char buf[BUFLEN];
-    char message[BUFLEN]; 
-    strcpy(message, appS->s);  
+    int s, i; 
  
     if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
     {
@@ -131,11 +118,11 @@ int sendSToVerify()
         exit(1);
     }
 
-    if (sendto(s, message, strlen(message) , 0 , (struct sockaddr *) &si_other, slen)==-1)
+    if (sendto(s, appS->s, strlen(appS->s) , 0 , (struct sockaddr *) &si_other, slen)==-1)
     {
         error("sendto()");
     }
-    printf("APP: message sent\n");
+    // printf("APP: message: %s\n", appS->s);
 
 	close(s);	
 
@@ -153,15 +140,12 @@ int hostname_to_ip(char * hostname , char* ip)
     int i;
     char* host;
 
-    // if (hostname != SERVER_NAME) host = SERVER_NAME;
-    // else host = hostname;
-
     host = SERVER_NAME;
 
-    printf("hostname: %s\n", host);
+    // printf("hostname: %s\n", host);
     he = (struct hostent*)calloc(1, sizeof(struct hostent));
     he = gethostbyname( host );
-    printf("host gotten\n");   
+    // printf("host gotten\n");   
     if ( he == NULL) 
     {
         // get the host info

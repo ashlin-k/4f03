@@ -1,4 +1,4 @@
-// to run: ./client 0 4 3 4 a b c "moore.mcmaster.ca" "moore.mcmaster.ca"
+// to run: ./client 0 3 6 6 a b c "moore.mcmaster.ca" "moore.mcmaster.ca"
 
 #include <math.h>
 #include <stdlib.h>
@@ -20,7 +20,6 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/wait.h>
-
 #include <pthread.h>
 
 // set up global variables
@@ -128,16 +127,10 @@ int main(int argc, char **argv)
 	{
 		printf("Cannot allocate memory for pthread.\n");
 		return -1;
-	}	
-
-	// allocate space for S
-	// S = (sstr*)calloc(1, sizeof(sstr));
-	// S->max_length = M*L;
-	// S->index = 0;
-	// S->s = (char*)calloc(S->max_length, sizeof(char));
+	}
 
 	// create clients
-	printf("Creating append client\n");
+	// printf("Creating append client\n");
 	clnt_append = clnt_create(hostname1, APPENDPROG, APPENDVERS, "tcp");
 	clnt_verify = clnt_create(hostname2, VERIFYPROG, VERIFYVERS, "tcp");
 	if (clnt_append == (CLIENT*)NULL)
@@ -146,14 +139,14 @@ int main(int argc, char **argv)
 		clnt_pcreateerror(hostname1);
 		exit(1);
 	}
-	printf("Append client created sucessfully\n");
+	// printf("Append client created sucessfully\n");
 	if (clnt_verify == (CLIENT*)NULL)
 	{
 		printf("VerifyServer is null\n");
 		clnt_pcreateerror(hostname2);
 		exit(1);
 	}
-	printf("Verify client created sucessfully\n");
+	// printf("Verify client created sucessfully\n");
 
 	// initialize servers and check results are valid
 	struct append_arg app_arg;
@@ -164,9 +157,7 @@ int main(int argc, char **argv)
 	app_arg.c1 = c1;
 	app_arg.c2 = c2;
 	app_arg.hostname2 = hostname2;
-	printf("Making init call\n");
 	int *res1 = rpc_initappendserver_1(&app_arg, clnt_append);
-	printf("Init call complete\n");
 	if (res1 == (int*)NULL)
 	{
 		printf("Could not locate AppendServer\n");
@@ -178,10 +169,7 @@ int main(int argc, char **argv)
 		printf("Could not initialize AppendServer\n");
 		exit(1);
 	}
-	else
-	{
-		printf("Worked! Returned %d\n", *res1);
-	}
+	
 	struct verify_arg ver_arg;
 	ver_arg.n = N;
 	ver_arg.l = L;
@@ -200,61 +188,51 @@ int main(int argc, char **argv)
 	}
 
     // create variable to store return values from threads
-    int passed = 0;
-    long threadCount = 0;
+    unsigned int passed = 0;
+    unsigned long threadCount = 0;
 
-    // use openMP to call addToS as a CS
-    // the threads return a value, which is the number of segments that passed
-    // each thread's return value should be added to the variable passed
-    printf("Creating threads...\n");
-/*    #pragma omp parallel for num_threads(N) reduction(+: passed)
-    for (threadCount = 0; threadCount < N;  threadCount++)
-	{
-		passed += addToS(threadCount);
-	}
-	printf("Threads complete. Destroy clients\n");
-*/
-	void* threadPassedPtr;
+    // printf("Creating threads...\n");
+
+	unsigned int* threadPassedPtr =(unsigned int*)calloc(1, sizeof(unsigned int));
+	memset(threadPassedPtr, 0, sizeof(unsigned int));
 	for (threadCount = 0; threadCount < N;  threadCount++)
 	{
-		pthread_create(&thread_handles[threadCount],NULL,addToS, (void*) threadCount);
+		pthread_create(&thread_handles[threadCount], NULL, addToS, (void*) threadCount);
 	}
 	for (threadCount = 0; threadCount < N;  threadCount++)
 	{
-		pthread_join(thread_handles[threadCount],NULL);
-		passed+= *(int*)(&threadPassedPtr);
+		pthread_join(thread_handles[threadCount], (void*)threadPassedPtr);
+		passed+= *threadPassedPtr;		
+		// printf("T%lu: returned = %lu, passed = %lu\n", threadCount, *threadPassedPtr, passed);
 	}
-	free(thread_handles);
-	// destroy clients
-	if (clnt_append != NULL) clnt_destroy(clnt_append);
-	if (clnt_verify != NULL) clnt_destroy(clnt_verify);
-
-	printf("Clients destroyed. Print results\n");
+	free(thread_handles);		
 
 	// get S from verify_server
-	char** str_ptr;
-	*str_ptr = (char*) calloc(BUFLEN, sizeof(char));
-	str_ptr = rpc_getstring_1(NULL, clnt_verify);
-	// char* str = *str_ptr;
+	char** str_ptr = rpc_getstring_1(NULL, clnt_verify);
+	char* str = *str_ptr;
 	
 	//set up print to file ----------------------------------------------
 
-	// FILE *fp;
-	// fp = fopen("out.txt", "w");
-	// if (fp == NULL) 
-	// {
-	// 	printf("unable to write to out.txt\n");
-	// 	exit(0);
- //    }
+	FILE *fp;
+	fp = fopen("out.txt", "w");
+	if (fp == NULL) 
+	{
+		printf("unable to write to out.txt\n");
+		exit(0);
+    }
 
-	// // results
-	// printf("%s\n", str);
-	// fprintf(fp, "%s\n", str);
-	// printf("%d\n", passed);
-	// fprintf(fp, "%d\n", passed);
+	// results
+	printf("%s\n", str);
+	fprintf(fp, "%s\n", str);
+	printf("%lu\n", passed);
+	fprintf(fp, "%lu\n", passed);
 
-	// // close the file
-	// fclose(fp);
+	// close the file
+	fclose(fp);
+
+	// destroy clients
+	if (clnt_append != NULL) clnt_destroy(clnt_append);
+	if (clnt_verify != NULL) clnt_destroy(clnt_verify);
 
 	return 0;
 }
@@ -269,48 +247,44 @@ void* addToS(void* rank)
 	unsigned int counter = 0;
 	unsigned int occC0=0, occC1=0, occC2=0;
 
-	printf("--> T%lu: Started S\n", my_rank);
-
 	/** append char to S **/
-	printf("--> T%lu: Starting while loop\n", my_rank);
+	// printf("--> T%lu: my_char: %c\n", my_rank, my_char);
 	while (*appendRet != -1)
 	{
 		timeMicrosec = (rand() % 401 + 100) * 1000;		// time in us
 		usleep(timeMicrosec);
 
-		// #pragma omp critical
 		appendRet = rpc_append_1(&my_char, clnt_append);
 		if (appendRet == (int*)NULL)
 		{
 			clnt_perror(clnt_append, hostname1);
 			exit(1);
 		}		
-		if (*appendRet != -1) printf("--> T%lu: Added another letter\n", my_rank);		
+		// if (*appendRet != -1) printf("--> T%lu: Added another letter\n", my_rank);		
 	}
 
-	printf("--> T%lu: S is complete\n", my_rank);
+	// printf("--> T%lu: S is complete\n", my_rank);
 
 	/** verify segments **/
-	char* seg;
+	char** seg;
 	seg = (char*)calloc(L, sizeof(char));
-	char** verifyRet;
-	while (seg[0] != '-')
-	// int i = 0;
-	// for (i=0; i<5; i++)
+	memset(seg, 0, L);
+
+	seg = rpc_getseg_1(&my_rank, clnt_verify);	
+	if (seg == (char**)NULL)
 	{
-		verifyRet = rpc_getseg_1(&my_rank, clnt_verify);
-		if (verifyRet == (char**)NULL)
-		{
-			clnt_perror(clnt_verify, hostname2);
-			exit(1);
-		}		
-	 	seg = *verifyRet;
-	 	printf("--> T%lu: seg = %s\n", my_rank, seg);
+		clnt_perror(clnt_verify, hostname2);
+		exit(1);
+	}	
+
+	while ( ((*seg)[0] != '-') )
+	{		
+	 	// printf("--> T%lu: seg = |%s|, count = %lu\n", my_rank, *seg, counter);
 
 		// count occurrences of c0, c1 and c2 in S
-		occC0 = count_chars(seg, c0);
-		occC1 = count_chars(seg, c1);
-		occC2 = count_chars(seg, c2);
+		occC0 = count_chars(*seg, c0);
+		occC1 = count_chars(*seg, c1);
+		occC2 = count_chars(*seg, c2);
 
 		switch(F) 
 		{
@@ -330,9 +304,19 @@ void* addToS(void* rank)
 			counter += (occC0 - occC1 == occC2);
 			break;
 		}
+
+		seg = rpc_getseg_1(&my_rank, clnt_verify);
+		if (seg == (char**)NULL)
+		{
+			clnt_perror(clnt_verify, hostname2);
+			exit(1);
+		}
 	}
 
-	printf("--> T%lu: count = %lu\n", my_rank, counter);	return (void*) counter;}
+	// printf("--> T%lu: count = %lu\n", my_rank, counter);	
+
+	return (void*) counter;
+}
 
 
 //function to count occurrences of character in S within a segment
